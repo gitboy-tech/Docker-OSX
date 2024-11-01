@@ -51,10 +51,11 @@
 #
 #       docker run ... -e EXTRA="-usb -device usb-host,hostbus=1,hostaddr=8" ...
 #       # you will also need to pass the device to the container
-
-FROM archlinux:base-devel
+FROM docker.m.daocloud.io/archlinux:base-devel
 LABEL maintainer='https://twitter.com/sickcodes <https://sick.codes>'
-
+RUN echo 'change'
+# ENV http_proxy $http_proxy # to do how to use outer proxy
+# ENV https_proxy $https_proxy
 SHELL ["/bin/bash", "-c"]
 
 # change disk size here or add during build, e.g. --build-arg VERSION=10.14.5 --build-arg SIZE=50G
@@ -69,11 +70,13 @@ ARG RANKMIRRORS
 ARG MIRROR_COUNTRY=US
 ARG MIRROR_COUNT=10
 
-RUN tee /etc/pacman.d/mirrorlist <<< 'Server = https://geo.mirror.pkgbuild.com/$repo/os/$arch' \
+RUN tee /etc/pacman.d/mirrorlist <<< 'Server = https://mirrors.tuna.tsinghua.edu.cn/archlinux/$repo/os/$arch' \
+    && tee -a /etc/pacman.d/mirrorlist <<< 'Server = https://geo.mirror.pkgbuild.com/$repo/os/$arch' \
     && tee -a /etc/pacman.d/mirrorlist <<< 'Server = http://mirror.rackspace.com/archlinux/$repo/os/$arch' \
     && tee -a /etc/pacman.d/mirrorlist <<< 'Server = https://mirror.rackspace.com/archlinux/$repo/os/$arch'
 
 # Fixes issue with invalid GPG keys: update the archlinux-keyring package to get the latest keys, then remove and regenerate gnupg keys
+
 RUN pacman -Sy archlinux-keyring --noconfirm \
     && rm -rf /etc/pacman.d/gnupg \
     && pacman-key --init \
@@ -81,13 +84,15 @@ RUN pacman -Sy archlinux-keyring --noconfirm \
 
 RUN if [[ "${RANKMIRRORS}" ]]; then \
         { pacman -Sy wget --noconfirm || pacman -Syu wget --noconfirm ; } \
-        ; wget -O ./rankmirrors "https://raw.githubusercontent.com/sickcodes/Docker-OSX/${BRANCH:=master}/rankmirrors" \
+        ; wget -O ./rankmirrors "https://raw.gitmirror.com/sickcodes/Docker-OSX/${BRANCH:=master}/rankmirrors" \
         ; wget -O- "https://www.archlinux.org/mirrorlist/?country=${MIRROR_COUNTRY:-US}&protocol=https&use_mirror_status=on" \
         | sed -e 's/^#Server/Server/' -e '/^#/d' \
         | head -n "$((${MIRROR_COUNT:-10}+1))" \
         | bash ./rankmirrors --verbose --max-time 5 - > /etc/pacman.d/mirrorlist \
         && cat /etc/pacman.d/mirrorlist \
     ; fi
+
+# ; wget -O ./rankmirrors "https://raw.githubusercontent.com/sickcodes/Docker-OSX/${BRANCH:=master}/rankmirrors" \
 
 RUN tee -a /etc/pacman.d/gnupg/gpg.conf <<< 'keyserver hkp://keyserver.ubuntu.com' \
     && tee -a /etc/pacman.d/gnupg/gpg.conf <<< 'keyserver hkps://hkps.pool.sks-keyservers.net:443' \
@@ -129,7 +134,9 @@ RUN tee -a sshd_config <<< 'AllowTcpForwarding yes' \
 USER arch
 
 # download OSX-KVM for the submodules
-RUN git clone --recurse-submodules --depth 1 https://github.com/kholia/OSX-KVM.git /home/arch/OSX-KVM
+# RUN git clone --recurse-submodules --depth 1 https://github.com/kholia/OSX-KVM.git /home/arch/OSX-KVM
+# RUN git clone --recurse-submodules --depth 1 https://gitclone.com/github.com/kholia/OSX-KVM /home/arch/OSX-KVM
+RUN git clone --recurse-submodules --depth 1 https://gitclone.com/github.com/gitboy-tech/OSX-KVM /home/arch/OSX-KVM
 
 # enable ssh
 # docker exec .... ./enable-ssh.sh
@@ -179,8 +186,8 @@ RUN if [[ "${LINUX}" == true ]]; then \
 
 # optional --build-arg to change branches for testing
 ARG BRANCH=master
-ARG REPO='https://github.com/sickcodes/Docker-OSX.git'
-RUN git clone --recurse-submodules --depth 1 --branch "${BRANCH:=master}" "${REPO:=https://github.com/sickcodes/Docker-OSX.git}"
+ARG REPO='https://gitclone.com/github.com/gitboy-tech/Docker-OSX.git'
+RUN git clone --recurse-submodules --depth 1 --branch "${BRANCH:=master}" "${REPO:=https://gitclone.com/github.com/gitboy-tech/Docker-OSX.git}"
 
 RUN touch Launch.sh \
     && chmod +x ./Launch.sh \
@@ -246,8 +253,10 @@ ARG STOCK_UUID=007076A6-F2A2-4461-BBE5-BAD019F8025A
 ARG STOCK_MAC_ADDRESS=00:0A:27:00:00:00
 ARG STOCK_WIDTH=1920
 ARG STOCK_HEIGHT=1080
-ARG STOCK_MASTER_PLIST_URL=https://raw.githubusercontent.com/sickcodes/osx-serial-generator/master/config-custom.plist
-ARG STOCK_MASTER_PLIST_URL_NOPICKER=https://raw.githubusercontent.com/sickcodes/osx-serial-generator/master/config-nopicker-custom.plist
+# ARG STOCK_MASTER_PLIST_URL=https://raw.githubusercontent.com/sickcodes/osx-serial-generator/master/config-custom.plist
+ARG STOCK_MASTER_PLIST_URL=https://raw.gitmirror.com/sickcodes/osx-serial-generator/master/config-custom.plist
+# ARG STOCK_MASTER_PLIST_URL_NOPICKER=https://raw.githubusercontent.com/sickcodes/osx-serial-generator/master/config-nopicker-custom.plist
+ARG STOCK_MASTER_PLIST_URL_NOPICKER=https://raw.gitmirror.com/sickcodes/osx-serial-generator/master/config-nopicker-custom.plist
 ARG STOCK_BOOTDISK=/home/arch/OSX-KVM/OpenCore/OpenCore.qcow2
 ARG STOCK_BOOTDISK_NOPICKER=/home/arch/OSX-KVM/OpenCore/OpenCore-nopicker.qcow2
 
@@ -314,7 +323,8 @@ ENV IMAGE_FORMAT=qcow2
 
 ENV KVM='accel=kvm:tcg'
 
-ENV MASTER_PLIST_URL="https://raw.githubusercontent.com/sickcodes/osx-serial-generator/master/config-custom.plist"
+ENV MASTER_PLIST_URL="https://raw.gitmirror.com/sickcodes/osx-serial-generator/master/config-custom.plist"
+# ENV MASTER_PLIST_URL="https://raw.githubusercontent.com/sickcodes/osx-serial-generator/master/config-custom.plist"
 
 # ENV NETWORKING=e1000-82545em
 ENV NETWORKING=vmxnet3
